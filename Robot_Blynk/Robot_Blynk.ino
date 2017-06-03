@@ -36,6 +36,8 @@ void setup() {
 
   Serial.println("Adafruit Motorshield v2 - DC Motor");
 
+  pinMode(7,INPUT_PULLUP);
+
   AFMS.begin();  // create with the default frequency 1.6KHz
   //AFMS.begin(1000);  // OR with a different frequency, say 1KHz
 
@@ -105,6 +107,10 @@ void readAccelScaled(float &x, float &y, float &z) {
 //########## LOOP ######################################
 void loop() {
 
+  //int i = digitalRead(7);
+  //Serial.println(i);
+  //return;
+
   #if 0
   CurieIMU.setAccelerometerRange(4);
   CurieIMU.autoCalibrateAccelerometerOffset(X_AXIS, 0);
@@ -165,7 +171,7 @@ void loop() {
   CurieIMU.autoCalibrateAccelerometerOffset(Y_AXIS, 0);
   CurieIMU.autoCalibrateAccelerometerOffset(Z_AXIS, 1);
 
-
+#if 0
   long n = 0;
   for(int i=0;i<1000;i++) {
     n += CurieIMU.getAccelerometerOffset(X_AXIS);
@@ -177,6 +183,7 @@ void loop() {
     sprintf(buffer,"CAL %f",n);
     Serial.println(buffer);
   }
+  #endif
   // done calibrating
 
   delay(1000);
@@ -190,7 +197,7 @@ void loop() {
 
   unsigned long startTime = micros();
   float lastm = startTime;
-  float travel = 2;
+  float travel = 16;
   float velocity =0;
   float location = 0;
   int countdown = 1000;
@@ -208,7 +215,19 @@ void loop() {
 
     velocity += 9.8*x*dt;
 
-    location += velocity * dt;
+    //location += velocity * dt;
+    static int lastread=0;
+    static int holdoff = 0;
+    int switchread = digitalRead(7);
+    if(holdoff > 0) {
+      holdoff--;
+    }
+    else if(lastread != switchread) {
+      if(!lastread && switchread)
+        location++;
+      lastread=switchread;
+      holdoff=500;
+    }
 
     if(cup++ % 10000 < 1) {
       float t = (m-startTime)/1e6;
