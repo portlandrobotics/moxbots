@@ -124,6 +124,17 @@ void readAccelScaled(float &x, float &y, float &z) {
 //########## LOOP ######################################
 void loop() {
 
+#ifdef CALIBRATE_BOUNCE
+  // we determined that we get about 5ms of bounce (7.5 maybe, depending on sensitivity)
+  //  fastest real pulse was 25ms, so 10ms seems like a good choice
+  for(int i=255; i>0;i-=16) {
+    setMotor(MOTOR_RR,BACKWARD, i);
+    delay(1500);
+  }
+  return;
+#endif
+
+
   #if 0
   // this is a bunch of code we used to test the IMU sensor.  Left in here for future reference
   
@@ -205,7 +216,8 @@ void loop() {
   unsigned long startTime = micros();
 
   // desired travel distance, presently in wheel clicks
-  float travel = 16*4;
+  //    4 counts per revolution, roughly 6in per rev
+  float travel = 4*2*30;
 
   // *** loop state variables ***
   float lastm = startTime;
@@ -225,8 +237,8 @@ void loop() {
   int countdown=10;
   
   while(1) {
-    CurieIMU.readAccelerometer(rx,ry,rz);
-    float x=scaleAccel(rx-xtracal,range);
+    //CurieIMU.readAccelerometer(rx,ry,rz);
+    //float x=scaleAccel(rx-xtracal,range);
 
     // optional deadzone
     //if (fabs(x) < .01)
@@ -236,7 +248,7 @@ void loop() {
     float m = micros();
     float dt = (m-lastm)/1e6;
 
-    velocity += 9.8*x*dt;
+    //velocity += 9.8*x*dt;
 
     //location += velocity * dt;
     int switchread = digitalRead(7);
@@ -245,23 +257,27 @@ void loop() {
     }
     else*/
     if(lastread != switchread) {
-      //if(!lastread && switchread)
+      if(m-lastSwitchEvent < 10) {
+        // debounce
+      } else {
         location++;
-      lastread=switchread;
-      lastSwitchEvent = m;
-      Serial.print(switchread);
-      Serial.print(" ");
-      Serial.println(location);
+        lastread=switchread;
+        lastSwitchEvent = m;
+        //Serial.print(switchread);
+        //Serial.print(" ");
+        //Serial.println(location);
+      }
     }
 
+#if 0
     if(cup++ % 10000 < 1) {
       float t = (m-startTime)/1e6;
       char buffer[512];
       
-      sprintf(buffer, "%d %f %f : %f %f : %f",rx,x,dt,velocity,location,velocity / t);
+      sprintf(buffer, "%d %f %f : %f %f : %f",rx,0/*x*/,dt,velocity,location,velocity / t);
       Serial.println(buffer);
     }
-
+#endif
     if(fabs(location) > travel+.5)
       break;
 
@@ -283,9 +299,9 @@ void loop() {
 
     turnaccum += gz*dt;
 
-      
-      int motorspeedLeft = 0x80;
-      int motorspeedRight = 0x80 + turnaccum;
+      int nominalSpeed = 0x80;
+      int motorspeedLeft = nominalSpeed;// - turnaccum;
+      int motorspeedRight = nominalSpeed - turnaccum;
 
               char buffer[512];
          sprintf(buffer, "FAIL %f %f : %d %f",gz,turnaccum,motorspeedRight,location);
@@ -315,24 +331,25 @@ void loop() {
   setMotor(MOTOR_RR,RELEASE);
 
 
-  return;
+  //return;
 
-#if 0
+#if 1
   // this the gyro based turn code
   //   we'll put this stuff back in soon
   
-  setMotor(MOTOR_FL,FORWARD, 128);
-  setMotor(MOTOR_RL,FORWARD, 128);
-  setMotor(MOTOR_FR,FORWARD, 64);
-  setMotor(MOTOR_RR,FORWARD, 64);
 
-
-  float accum = 360;
+  float accum = 0;
     
   int speed=64;
   lastm = millis();
+
+  setMotor(MOTOR_FL,BACKWARD, 128);
+  setMotor(MOTOR_RL,BACKWARD, 128);
+  setMotor(MOTOR_FR,BACKWARD, 32);
+  setMotor(MOTOR_RR,BACKWARD, 32);
+
+
   while(1) {
-    delay(50);
 
     float m = millis();
     float dm = (m-lastm)/1000.;
@@ -341,7 +358,7 @@ void loop() {
     readGyroScaled(gx,gy,gz);
 
     accum += gz*dm;
-
+#if 0
     if(gz < 18 && speed > 0)
       speed--;
     else if (speed < 255)
@@ -349,7 +366,7 @@ void loop() {
 
     setMotorSpeed(MOTOR_FR, speed);
     setMotorSpeed(MOTOR_RR, speed);
-
+#endif
 #ifdef DEBUGSTUFF
     Serial.println(dm);
     Serial.println(gz);
@@ -358,10 +375,11 @@ void loop() {
     Serial.println("");
 #endif
 
-    if(accum < 0)
+    if(fabs(accum) > 180.)
       break;
 
     lastm=m;
+    delay(10);
   }
 
   setMotor(MOTOR_FL,RELEASE);
